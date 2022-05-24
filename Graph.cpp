@@ -364,9 +364,15 @@ void Graph::colorfulcore(){
     printf("time for colorful-core: %s (microseconds)\n", Utility::integer_to_string(t.elapsed()).c_str());
 }
 int acnt=0;
+
 void Graph::FindClique(const char* ord){
     Timer t;
-    colorfulcore();//left are the nodes satisfy
+    //if(attr_size == 2){
+    //    printf("use relative fair reduction\n");
+    //    Relative_fair_reduction();
+    //}
+    //else colorfulcore();
+    colorfulcore();
     clear_mem();
     //printf("colorfulcore done!\n");
     printf("time for colorfulcore: %s (microseconds)\n", Utility::integer_to_string(t.elapsed()).c_str());
@@ -415,11 +421,16 @@ void Graph::FindClique(const char* ord){
             #endif
             if(strcmp(ord,"sorted")==0) 
                 sort(component.begin(), component.end());
-            else if(strcmp(ord,"improve")==0)   
-                //component=GetFairnessOrdering(attr_size);
-                component=FairnessDegeranacyOrdering();
+            else if(strcmp(ord,"colorful")==0)   
+                component=GetColorfulOrdering();
             else if(strcmp(ord,"degree")==0)
                 component=GetDegreeOrdering();
+            else if(strcmp(ord, "degeneracy") == 0)
+                component = degeneracy_ordering(component);
+            else if(strcmp(ord, "anonymous") == 0)
+                component=GetFairnessOrdering(attr_size);
+            else if(strcmp(ord, "relative") == 0)
+                component = GetRelativeOrdering(component);
             long long tmp=(4*n+component.size()*attr_size+component.size()*attr_size*max_color+component.size()*3)*(long long)sizeof(int);
             if(tmp>max_mem_for_ordering) max_mem_for_ordering=tmp;
             Backtrack_Weak(R, component, X, cntC, 1);
@@ -446,12 +457,13 @@ void Graph::FindClique(const char* ord){
     delete[] nvis;
     delete[] rvis;
     delete[] vis;
+    change_mem(sizeof(int)*n*4 ,0);
 }
 
 void Graph::Backtrack_Weak(vector<int>& R, vector<int>& C, vector<int>& X, int* cntC, int depth){//R->current clique, C->candidates ordered, X->enumerated
+    
     if(C.size()==0&&X.size()==0&&R.size()>=threshold*attr_size){
         ResultSet.push_back(R);
-        change_mem(sizeof(int)*R.capacity(), 1);
         return;
     }
     else if(C.size()==0){
@@ -475,7 +487,6 @@ void Graph::Backtrack_Weak(vector<int>& R, vector<int>& C, vector<int>& X, int* 
     for(int i=0; i<C.size(); i++){
         int cur=C[i];//add node"cur" to the current clique
         newR.push_back(cur);
-
         //construct new candidate set
         vector<int> newC; newC.clear();
         //present the nodes that has been deleted
@@ -512,6 +523,7 @@ void Graph::Backtrack_Weak(vector<int>& R, vector<int>& C, vector<int>& X, int* 
                 nvis[edge_list[j]]=0;
             }
             newR.pop_back();
+
             change_mem(sizeof(newC)+sizeof(int)*newC.capacity(), 0);
             continue;
         }
@@ -526,10 +538,10 @@ void Graph::Backtrack_Weak(vector<int>& R, vector<int>& C, vector<int>& X, int* 
             nvis[edge_list[j]]=0;
         }
         /****/
-
         Backtrack_Weak(newR, newC, newX, newCnt, depth+1);
         X.push_back(cur);
         newR.pop_back();
+
         change_mem(sizeof(newC)+sizeof(int)*newC.capacity(), 0);
         change_mem(sizeof(newX)+sizeof(int)*newX.capacity(), 0);
     }
@@ -537,110 +549,6 @@ void Graph::Backtrack_Weak(vector<int>& R, vector<int>& C, vector<int>& X, int* 
     change_mem(sizeof(int)*attr_size, 0);
     change_mem(sizeof(SwapC)+sizeof(int)*SwapC.capacity(), 0);
     change_mem(sizeof(newR)+sizeof(int)*newR.capacity(), 0);
-}
-
-void Graph::Backtrack_Weak_improve(vector<int>& R, vector<int>& C, vector<int>& X, int* cntC, int depth){//R->current clique, C->candidates ordered, X->enumerated
-    if(C.size()==0&&X.size()==0&&R.size()>=threshold*attr_size){
-        ResultSet.push_back(R);
-        if(ResultSet.size()%100==0){
-            printf("size of result  =%d\n", ResultSet.size());
-        }
-        return;
-    }
-    else if(C.size()==0){
-        return;
-    }
-    vector<int> SwapC; SwapC.clear();
-    for(int i=0; i<R.size(); i++) rvis[R[i]]=1;
-    for(int i=0; i<C.size(); i++){
-        if(!rvis[C[i]]) SwapC.push_back(C[i]);
-    }
-    C=SwapC;
-    //for(int i=0; i<R.size(); i++) rvis[R[i]]=0;
-    /**decide the order of C**/
-    vector<int> recover_set;
-    vector<int> newR; newR.clear();
-    for(int j=0; j<R.size(); j++)
-        newR.push_back(R[j]);
-    for(int i=0; i<C.size(); i++){
-        //for(int j=0; j<R.size(); j++) rvis[R[j]]=1;
-        int cur=C[i];//add node"cur" to the current clique
-        newR.push_back(cur);
-
-        //construct new candidate set
-        vector<int> newC; newC.clear();
-        //present the nodes that has been deleted
-        for(int j=offset[cur]; j<pend[cur]; j++){
-            nvis[edge_list[j]]=1;
-        }
-
-        vector<int> recover_set;
-        recover_set.clear();
-        for(int j=0; j<C.size(); j++){//avoid finding a clique multiple times
-            if(nvis[C[j]]){
-                if(j>i){
-                //if(C[j]>cur){
-                    newC.push_back(C[j]);
-                }
-                else{
-                    cntC[attribute[C[j]]]--;
-                    recover_set.push_back(attribute[C[j]]);
-                }
-            }
-            else{
-                cntC[attribute[C[j]]]--;
-                recover_set.push_back(attribute[C[j]]);
-            }
-        }
-
-        int cut_flag=0;
-        int* cnt_current=new int[attr_size];
-        for(int j=0; j<attr_size; j++)
-            cnt_current[j]=0;
-        for(int j=0; j<newR.size(); j++)
-            cnt_current[attribute[newR[j]]]++;
-        for(int j=0; j<attr_size; j++){
-            if(cnt_current[j]+cntC[j]<threshold){
-                cut_flag=1;break;
-            }
-        }
-        delete[] cnt_current;
-
-        if(cut_flag||newC.size()+newR.size()<threshold*attr_size){
-            for(int j=0; j<recover_set.size(); j++)
-                cntC[recover_set[j]]++;
-            for(int j=offset[cur]; j<pend[cur]; j++){
-                nvis[edge_list[j]]=0;
-            }
-            for(int j=0; j<R.size(); j++) rvis[R[j]]=0;
-            newR.pop_back();
-            continue;
-        }
-
-        vector<int> newX;newX.clear();
-        for(int j=0; j<X.size(); j++){
-            if(nvis[X[j]]) newX.push_back(X[j]);
-        }
-        /**recover**/
-        for(int j=offset[cur]; j<pend[cur]; j++){
-            nvis[edge_list[j]]=0;
-        }
-        for(int j=0; j<R.size(); j++)
-            rvis[R[j]]=0;
-        /****/
-
-        Backtrack_Weak_improve(newR, newC, newX, cntC, depth+1);
-
-        for(int j=0; j<R.size(); j++)
-            rvis[R[j]]=1;
-        X.push_back(cur);
-        for(int j=0; j<recover_set.size(); j++)
-            cntC[recover_set[j]]++;
-        for(int j=0; j<R.size(); j++)
-            rvis[R[j]]=0;
-        newR.pop_back();
-    }
-  //  printf("component done\n");
 }
 
 
@@ -684,9 +592,9 @@ void Graph::FindStrongClique(const char* ord){
                 sort(component.begin(), component.end());
             else if(strcmp(ord, "heuristic")==0)
                 component=GetColorfulFairnessOrdering_Heuristic_2();
-            else if(strcmp(ord, "colorful")==0)
-                component=GetColorfulFairnessOrdering();
             else if(strcmp(ord, "fairness")==0)
+                component=GetColorfulFairnessOrdering();
+            else if(strcmp(ord, "anonymous")==0)
                 component=GetFairnessOrdering(attr_size);
 
             //component=GetColorfulFairnessOrdering_Heuristic();
@@ -849,226 +757,11 @@ void Graph::Backtrack_Strong(vector<int>& R, vector<int> *candidates, vector<int
     change_mem(sizeof(newR)+ sizeof(int)*newR.capacity(),0);
 }
 
-void Graph::Backtrack_Strong_modify(vector<int>& R, vector<int> *candidates, vector<int>& X, int att_node){
-    int empty=0;
-    int left=R.size()%attr_size;
-    int wanted=attr_size-left;//wanted number of candidates are not empty
-    for(int i=attr_size-1; i>=attr_size-wanted; i--){
-        if(candidates[i].size()==0) empty++;
-    }
-    if(empty!=0&&R.size()>=threshold*attr_size){
-        //check if maximal
-        union_X.clear();
-        for(int j=offset[R[0]]; j<pend[R[0]]; j++){
-            nei_vis[edge_list[j]]=1;
-        }
-        for(int i=1; i<R.size()-left; i++){
-            for(int j=offset[R[i]]; j<pend[R[i]]; j++){
-                if(nei_vis[edge_list[j]])
-                    nei_vis[edge_list[j]]++;
-            }
-        }
-        for(int j=offset[R[0]]; j<pend[R[0]]; j++){
-            if(nei_vis[edge_list[j]]==(R.size()-left)) union_X.push_back(edge_list[j]);
-            nei_vis[edge_list[j]]=0;
-        }
-        /*
-        for(int i=R.size()-1; i>=R.size()-left; i--){
-            union_X.push_back(R[i]);
-        }
-        for(int i=0; i<X.size(); i++)
-            union_X.push_back(X[i]);
-        
-        for(int i=0; i<attr_size; i++){
-            for(int j=0; j<candidates[i].size(); j++)
-                union_X.push_back(candidates[i][j]);
-        }
-        */
-       if(R.size()>=14&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140&
-        R[4]==136&&R[5]==292&&R[6]==175&&R[7]==241&&
-        R[8]==188&&R[9]==478&&R[10]==499&&R[11]==336&&
-        R[12]==353&&R[13]==520){
-            printf("union_x:  ");
-            for(int i=0; i>union_X.size(); i++){
-                printf("%d ", union_X[i]);
-            }
-            printf("\n");
-        }
-        if(union_X.size()<attr_size||Verify_largest(union_X)){
-            if(left){
-                vector<int> newR; newR.clear();
-                for(int i=0; i<R.size()-left; i++){
-                    newR.push_back(R[i]);
-                }
-                ResultSet.push_back(newR);
-            }
-            else ResultSet.push_back(R);
-            //if(R.size()>=4&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140)
-            //printf("add\n");
-        }
-        else{
-            //if(R.size()>=4&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140)
-            //printf("not maximal!\n");
-        }
-        return ;
-    }
 
-    vector<int> SwapC;
-    for(int i=0; i<R.size(); i++) rvis[R[i]]=1;
-    for(int i=0; i<attr_size; i++){
-        SwapC.clear();
-        for(int j=0; j<candidates[i].size(); j++){
-            if(!rvis[candidates[i][j]]){
-                SwapC.push_back(candidates[i][j]);
-            }
-        }
-        candidates[i]=SwapC;
-    }
-
-    #ifdef DEBUG
-    printf("C:  ");
-    for(int i=0; i<C.size(); i++){
-        printf(" %d");
-    }
-    printf("\n");
-    #endif
-    for(int i=0; i<R.size(); i++) rvis[R[i]]=0;
-
-    for(int i=0; i<candidates[att_node].size(); i++){
-        int cur=candidates[att_node][i];
-        vector<int> newR;newR.clear();
-        for(int j=0; j<R.size(); j++) newR.push_back(R[j]);
-        newR.push_back(cur);
-        #ifdef DEBUG
-       if(R.size()>=4&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140){
-        printf("cur=%d\n", cur);
-        printf("R: ");
-        for(int j=0; j<newR.size(); j++)
-            printf(" %d", newR[j]);
-        printf("\n");
-       }
-        #endif
-
-        vector<int> newC[attr_size]; 
-        for(int j=offset[cur]; j<pend[cur]; j++){
-            nvis[edge_list[j]]=1;
-        }
-        for(int j=0; j<attr_size; j++){
-            newC[j].clear();
-            if(j==att_node){
-                for(int k=0; k<candidates[j].size(); k++){
-                    if(nvis[candidates[j][k]]){
-                        if(k>i){
-                            newC[j].push_back(candidates[j][k]);
-                        }
-                    }
-                }
-            }
-            else{
-                for(int k=0; k<candidates[j].size(); k++){
-                    if(nvis[candidates[j][k]]){
-                        newC[j].push_back(candidates[j][k]);
-                    }
-                }
-            }
-        }
-
-        #ifdef DEBUG
-        if(R.size()>=4&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140){
-            for(int j=0; j<attr_size; j++){
-                printf("new C[%d]: ", j);
-                for(int k=0; k<newC[j].size(); k++){
-                    printf(" %d", newC[j][k]);
-                }
-                printf("\n");
-            }
-        }
-        #endif
-        int minval=n;
-        for(int j=0; j<attr_size; j++){
-            if(newC[j].size()<minval) minval=newC[j].size();
-        }
-        minval++;
-        if(minval*attr_size+newR.size()<threshold*attr_size){
-            for(int j=offset[cur]; j<pend[cur]; j++){
-                nvis[edge_list[j]]=0;
-            }
-            continue;
-        }
-        
-        vector<int> newX; newX.clear();
-        for(int j=0; j<X.size(); j++){
-            if(nvis[X[j]]) newX.push_back(X[j]);
-        }
-        for(int j=offset[cur]; j<pend[cur]; j++){
-            nvis[edge_list[j]]=0;
-        }
-        /*
-        if(R.size()>=4&&R[0]==76&&R[1]==265&&R[2]==146&&R[3]==140){
-            printf("X: ");
-            for(int j=0; j<newX.size(); j++){
-                printf("%d ", newX[j]);
-            }
-            getchar();
-        }
-        */
-        Backtrack_Strong_modify(newR, newC, newX, (att_node+1)%attr_size);
-        X.push_back(cur);
-    }
-}
 
 void Graph::Strong_reduction_Heuristic(){
     colorfulcore();
     printf("left size1=%d\n",left.size());
-    /*recolor
-    int* head=new int[n];
-    int* nxt= new int[n];
-    int* degree=new int[n];
-    int* cvis=new int[n];
-    int max_degree=0;
-    for(int i=0; i<n; i++) degree[i]=0;
-    for(int i=0; i<n; i++) head[i]=n;
-    for(int i=0; i<n; i++) cvis[i]=0;
-    max_color=0;
-    for(int i=0; i<left.size(); i++){
-        degree[left[i]]=pend[left[i]]-offset[left[i]];
-    }
-    for(int i=0; i<left.size(); i++){
-        int nod=left[i];
-        nxt[nod]=head[degree[nod]];
-        head[degree[nod]]=nod;
-        if(degree[nod]>max_degree)
-            max_degree=degree[nod];
-    }
-    for(int i=0; i<n; i++) color[i]=n;
-	max_color = 0;
-	for(int ii=max_degree; ii>=1; ii--){
-		for(int jj=head[ii]; jj!=n; jj=nxt[jj]){
-			int u = jj;
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) {
-                    cvis[c] = 1;
-                }
-			}
-
-			for(int j = 0;;j ++){
-                if(!cvis[j]) {
-                    color[u] = j;
-                    if(j > max_color) max_color = j;
-                    break;
-			    }
-            }
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) cvis[c] = 0;
-			}
-		}
-	}
-    max_color++;
-    printf("max_color2=%d\n", max_color);
-*/
-
     int** att_cnt= new int*[max_color];
     for(int i=0; i<max_color; i++) att_cnt[i]= new int[attr_size];
     int* cnt=new int [attr_size];
@@ -1352,8 +1045,6 @@ void Graph::Strong_reduction_basic(){
     printf("time for second reduction: %s (microseconds)\n", Utility::integer_to_string(tt.elapsed()).c_str());
 }
 
-
-
 void Graph::Strong_reduction(){
     colorfulcore();  //k->k/2
     int* vis = new int[n];
@@ -1507,7 +1198,7 @@ void Graph::Strong_reduction(){
 }
 
 //fairness degree
-
+//不管颜色，只看数量
 vector<int> Graph::GetFairnessOrdering(int att_siz){
     //printf("get fairness ordering\n");
     int** d;//fairness degree
@@ -1601,128 +1292,6 @@ vector<int> Graph::GetFairnessOrdering(int att_siz){
     return peeling_order;
 }
 
-void Graph::VerifyWClique(const char* inputname){
-    int ccnt=1;
-    printf("Start verifying graph from %s\n", inputname);
-    FILE *f = fopen(inputname, "r");
-    if(f == nullptr){
-        printf("Can not open the clique file!\n");
-        exit(1);
-    }
-    int num, node;
-    int* vis=new int[n];
-    vector<int> clique_cur;
-    int* attr_cnt= new int[attr_size];
-    printf("attr_size=%d\n", attr_size);
-    for(int i=0; i<n; i++) vis[i]=0;
-    while(fscanf(f, "%d", &num)==1){
-        clique_cur.clear();
-        for(int i=0; i<num; i++){
-            fscanf(f, "%d", &node);
-            clique_cur.push_back(node);
-        }
-        for(int i=0; i<attr_size; i++)
-            attr_cnt[i]=0;
-        for(int i=0; i<num; i++){
-            attr_cnt[attribute[clique_cur[i]]]++;
-        }
-        int legal=1;
-        for(int i=0; i<attr_size; i++){
-            if(attr_cnt[i]<threshold){
-                legal=0;
-                break;
-            }
-        }
-        if(legal){
-            for(int i=0; i<num; i++){
-                int cur=clique_cur[i];
-                for(int j=offset[cur]; j<offset[cur+1]; j++)
-                    vis[edge_list[j]]=1;
-                for(int j=i+1; j<num; j++){
-                    if(vis[clique_cur[j]]==0){
-                        legal=-1;break;
-                    }
-                }
-                for(int j=offset[cur]; j<offset[cur+1]; j++)
-                    vis[edge_list[j]]=0;
-            }
-        }
-
-        if(legal!=1){
-            printf("illegal clique %d: type=", ccnt);
-            if(legal==0) printf("wrong attribute");
-            else if(legal==-1) printf("wrong graph");
-            for(int i=0; i<num; i++)
-                printf(" %d", clique_cur[i]);
-            printf("\n");
-            system("PAUSE");
-        }
-        ccnt++;
-    }
-    printf("ALL CLIQUES ARE LEGAL!\n");
-}
-
-void Graph::VerifySClique(const char* inputname){
-    int ccnt=1;
-    printf("Start verifying graph from %s\n", inputname);
-    FILE *f = fopen(inputname, "r");
-    if(f == nullptr){
-        printf("Can not open the clique file!\n");
-        exit(1);
-    }
-    int num, node;
-    int* vis=new int[n];
-    vector<int> clique_cur;
-    int* attr_cnt= new int[attr_size];
-    printf("attr_size=%d\n", attr_size);
-    for(int i=0; i<n; i++) vis[i]=0;
-    while(fscanf(f, "%d", &num)==1){
-        clique_cur.clear();
-        for(int i=0; i<num; i++){
-            fscanf(f, "%d", &node);
-            clique_cur.push_back(node);
-        }
-        for(int i=0; i<attr_size; i++)
-            attr_cnt[i]=0;
-        for(int i=0; i<num; i++){
-            attr_cnt[attribute[clique_cur[i]]]++;
-        }
-        int legal=1;
-        for(int i=0; i<attr_size; i++){
-            if(attr_cnt[i]!=num/attr_size){
-                legal=0;
-                break;
-            }
-        }
-        if(legal){
-            for(int i=0; i<num; i++){
-                int cur=clique_cur[i];
-                for(int j=offset[cur]; j<offset[cur+1]; j++)
-                    vis[edge_list[j]]=1;
-                for(int j=i+1; j<num; j++){
-                    if(vis[clique_cur[j]]==0){
-                        legal=-1;break;
-                    }
-                }
-                for(int j=offset[cur]; j<offset[cur+1]; j++)
-                    vis[edge_list[j]]=0;
-            }
-        }
-
-        if(legal!=1){
-            printf("illegal clique %d: type=", ccnt);
-            if(legal==0) printf("wrong attribute");
-            else if(legal==-1) printf("wrong graph");
-            for(int i=0; i<num; i++)
-                printf(" %d", clique_cur[i]);
-            printf("\n");
-            system("PAUSE");
-        }
-        ccnt++;
-    }
-    printf("ALL STRONG CLIQUES ARE LEGAL!\n");
-}
-
 vector<int> Graph::GetColorfulFairnessOrdering(){
     //printf("get colorful fairness ordering\n");
     clear_local_mem();
@@ -1730,54 +1299,7 @@ vector<int> Graph::GetColorfulFairnessOrdering(){
     int* vis = new int[n];
     for(int i=0; i<n; i++) vis[i]=1;
     for(int i=0; i<component.size(); i++) vis[component[i]]=0;
- /**recolor**
-    int* head=new int[n];
-    int* nxt= new int[n];
-    int* degree=new int[n];
-    int* cvis=new int[n];
-    int max_degree=0;
-    for(int i=0; i<n; i++) degree[i]=0;
-    for(int i=0; i<n; i++) head[i]=n;
-    for(int i=0; i<n; i++) cvis[i]=0;
-    max_color=0;
-    for(int i=0; i<component.size(); i++){
-        degree[component[i]]=pend[component[i]]-offset[component[i]];
-    }
-    for(int i=0; i<component.size(); i++){
-        int nod=component[i];
-        nxt[nod]=head[degree[nod]];
-        head[degree[nod]]=nod;
-        if(degree[nod]>max_degree)
-            max_degree=degree[nod];
-    }
-    for(int i=0; i<n; i++) color[i]=n;
-	max_color = 0;
-	for(int ii=max_degree; ii>=1; ii--){
-		for(int jj=head[ii]; jj!=n; jj=nxt[jj]){
-			int u = jj;
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) {
-                    cvis[c] = 1;
-                }
-			}
-
-			for(int j = 0;;j ++){
-                if(!cvis[j]) {
-                    color[u] = j;
-                    if(j > max_color) max_color = j;
-                    break;
-			    }
-            }
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) cvis[c] = 0;
-			}
-		}
-	}
-    max_color++;
-    printf("<max_color=%d>\n", max_color);
-    */
+ 
     int** cntGroup=new int*[n];
     for(int i=0; i<n; i++){
         cntGroup[i]= new int[3];
@@ -1796,6 +1318,8 @@ vector<int> Graph::GetColorfulFairnessOrdering(){
     change_local_mem(sizeof(int)*n,1);
     for(int i=0; i<component.size(); i++)
         idx[component[i]]=i;
+       printf("step3");
+
     vector<int> peeling_order; peeling_order.clear();
     ListLinearHeap *heap = new ListLinearHeap(component.size(), component.size());//nodes, max degree
     heap->init(component.size(), component.size(), queue_n, queue_fair);//number of nodes, max degree, start position of arr, start pos of degreesa
@@ -1932,58 +1456,7 @@ vector<int> Graph::GetColorfulFairnessOrdering_Heuristic(){
 }
 
 vector<int> Graph::GetColorfulFairnessOrdering_Heuristic_2(){
- /**recolor*
-    int* head=new int[n];
-    int* nxt= new int[n];
-    int* degree=new int[n];
-    int* cvis=new int[n];
-    int max_degree=0;
-    for(int i=0; i<n; i++) degree[i]=0;
-    for(int i=0; i<n; i++) head[i]=n;
-    for(int i=0; i<n; i++) cvis[i]=0;
-    
-    max_color=0;
-    for(int i=0; i<component.size(); i++){
-        degree[component[i]]=pend[component[i]]-offset[component[i]];
-    }
-    for(int i=0; i<component.size(); i++){
-        int nod=component[i];
-        nxt[nod]=head[degree[nod]];
-        head[degree[nod]]=nod;
-        if(degree[nod]>max_degree)
-            max_degree=degree[nod];
-    }
-    for(int i=0; i<n; i++) color[i]=n;
-	max_color = 0;
-	for(int ii=max_degree; ii>=1; ii--){
-		for(int jj=head[ii]; jj!=n; jj=nxt[jj]){
-			int u = jj;
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) {
-                    cvis[c] = 1;
-                }
-			}
-
-			for(int j = 0;;j ++){
-                if(!cvis[j]) {
-                    color[u] = j;
-                    if(j > max_color) max_color = j;
-                    break;
-			    }
-            }
-			for(int j = offset[u];j < pend[u];j ++) {
-                int c = color[edge_list[j]];
-                if(c != n) cvis[c] = 0;
-			}
-		}
-	}
-    max_color++;
-    printf("<max_color=%d>\n", max_color);
-    
-    delete[] head;
-    delete[] nxt;
-    */
+ 
     clear_local_mem();
     int* head;
     int* nxt;
@@ -2244,7 +1717,7 @@ long long Graph::get_max(){
     return this->max_mem;
 }
 
-vector<int> Graph::FairnessDegeranacyOrdering(){
+vector<int> Graph::GetColorfulOrdering(){
     int* vis=new int[n];
     for(int i=0; i<n; i++) vis[i]=0;
     for(int i=0; i<component.size(); i++) vis[component[i]]=1;
@@ -2294,7 +1767,8 @@ vector<int> Graph::FairnessDegeranacyOrdering(){
         degree_arr[i]=min_d[i];
     int* ordered_c=new int[component.size()];
     for(int i=0; i<component.size();i++) ordered_c[i]=i;
-    
+    idx_pos = new int[n];
+    int cnt=0;
     ListLinearHeap *heap = new ListLinearHeap(component.size(), component.size());
     heap->init(component.size(), component.size(), ordered_c, degree_arr);
     vector<int> reversed_peeling_order;reversed_peeling_order.clear();
@@ -2304,6 +1778,7 @@ vector<int> Graph::FairnessDegeranacyOrdering(){
         nod=component[nod];
         //printf("nod=%d, key=%d\n", nod, key);
         reversed_peeling_order.push_back(nod);
+        idx_pos[nod]= cnt ++;
         vis[nod]=0;
         for(int j=offset[nod]; j<pend[nod]; j++){
             if(vis[edge_list[j]]==1){

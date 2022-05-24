@@ -112,6 +112,9 @@ public:
 	}
 
 	ui decrement(ui id, ui dec) {
+		if(key_s[id] < dec){
+			printf("key_s[%d]=%d,dec=%d\n", id, key_s[id], dec);
+		}
 		assert(key_s[id] >= dec);
 
 		if(pre_s[id] == n) {

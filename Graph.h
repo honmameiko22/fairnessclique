@@ -33,13 +33,22 @@ class Graph{
     int* nvis;
     int* rvis;
 
-
+    bool debug_is_on=false;
     public:
     Graph(const char* _dir);//init some values
     ~Graph();
     void ReadGraph(const char* inputname, const char* attr, int, const char* mode);
     void colorfulcore();
+    void Baseline(const char*, int);
+    bool checksingle(set<int> clique);
+    void BronKerbosch(set<int>, set<int>, set<int>, vector<set<int> >& );
     void FindClique(const char*);
+    void FindRelatedFairClique_W(const char*, int);
+    void FindRelatedFairClique_S(const char*, int);
+    void FindRelativeClique_Add(const char*, int);
+    bool Backtrack_Add(vector<int>& , vector<int>& , vector<int>& , int*, int, ofstream&);
+    void deep_search(vector<int> , vector<int>& , vector<vector<int>>& , int , int , int, ofstream&, int);
+    vector<int> degeneracy_ordering(vector<int>);
     void FindStrongClique(const char*);
     void Strong_reduction_basic();
     void Strong_reduction();
@@ -47,11 +56,17 @@ class Graph{
     void Strong_reduction_Three();
     void VerifyWClique(const char* inputname);
     void VerifySClique(const char* inputname);
+    void VerifyRClique(const char* filename, const char* attrname, int, int);
+    void enum_related_w(vector<int>, int, ofstream&);
+    void Relative_fair_reduction();
+    void RFair_Backtrack(vector<int> , vector<int>* , int, vector<int> , vector<int> , int , int , int, ofstream&);
+    int* idx_pos;
     vector<int> core_decomposition(int);
     vector<int> core_decomposition_cut();
     vector<int> GetFairnessOrdering(int);
     vector<int> GetDegreeOrdering();
-    vector<int> FairnessDegeranacyOrdering();
+    vector<int> GetRelativeOrdering(vector<int> array);
+    vector<int> GetColorfulOrdering();
     vector<int> GetColorfulFairnessOrdering();
     vector<int> GetColorfulFairnessOrdering_Heuristic();
     vector<int> GetColorfulFairnessOrdering_Heuristic_2();
@@ -61,8 +76,17 @@ class Graph{
     void Backtrack_Weak(vector<int>&, vector<int>&, vector<int>&, int*, int);
     void Backtrack_Weak_improve(vector<int>&, vector<int>&, vector<int>&, int*, int);
     long long get_max();
-
+  
     private:
+  
+    inline void printClique(vector<int> clique, ofstream& ofs){
+        sort(clique.begin(), clique.end());
+        for(vector<int> ::iterator it = clique.begin(); it!=clique.end(); it++)
+            //ofs<<*it<<"("<<attribute[*it]<<")"<<" "<<"["<<idx_pos[*it]<<"]"<<" ";
+           ofs<<*it<<" ";
+        ofs<<"\n";
+    }
+
     void change_mem(long long tmp, int flag){
         if(flag){
             now_mem+=tmp;
